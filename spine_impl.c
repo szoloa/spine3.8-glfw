@@ -8,10 +8,6 @@
 #endif
 #include <glad/glad.h>
 
-/* ========================================================= */
-/* FILE LOADING                                              */
-/* ========================================================= */
-
 char* _spUtil_readFile(const char* path, int* length) {
     FILE* file = fopen(path, "rb");
     if (!file) return NULL;
@@ -27,10 +23,6 @@ char* _spUtil_readFile(const char* path, int* length) {
     *length = size;
     return data;
 }
-
-/* ========================================================= */
-/* TEXTURE CREATION                                          */
-/* ========================================================= */
 
 void _spAtlasPage_createTexture(spAtlasPage* self, const char* path) {
     int width, height, channels;

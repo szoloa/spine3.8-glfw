@@ -5,7 +5,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <stdio.h>
-#include <winscard.h>
+// #include <winscard.h>
 #include "stb_image.h"
 typedef struct {
     GLuint vao;
@@ -31,8 +31,10 @@ typedef struct {
     spAnimationState* state;
 } SpineObject;
 
-SpineObject load_spine(char* spine_name, char* animation) {
-    SpineObject spine;
+const char* animations[100];
+int animationCount = 0;
+SpineObject spine;
+void load_spine(char* spine_name) {
     char path_atlas[20], path_skel[20];
     sprintf(path_atlas, "data/%s/%s_spr.atlas", spine_name, spine_name);
     sprintf(path_skel, "data/%s/%s_spr.skel", spine_name, spine_name);
@@ -47,17 +49,20 @@ SpineObject load_spine(char* spine_name, char* animation) {
     spine.stateData =
         spAnimationStateData_create(skeletonData);
     spine.state = spAnimationState_create(spine.stateData);
+
+    for (int i = 0;
+         i < skeletonData->animationsCount;
+         i++) {
+             animations[i] = skeletonData->animations[i]->name;
+             animationCount++;
+    }
     spAnimationState_setAnimationByName(spine.state, 0, "Idle_01", 1);
-    spAnimationState_setAnimationByName(spine.state, 1, animation, 1);
-    return spine;
 }
 
-void update_animation(SpineObject* spine) {
-    float delta = 1.0f / 60.0f;
-
-    spAnimationState_update(spine->state, delta);
-    spAnimationState_apply(spine->state, spine->skeleton);
-    spSkeleton_updateWorldTransform(spine->skeleton);
+void update_animation(float delta) {
+    spAnimationState_update(spine.state, delta);
+    spAnimationState_apply(spine.state, spine.skeleton);
+    spSkeleton_updateWorldTransform(spine.skeleton);
 }
 
 char* read_file(const char* path) {
@@ -204,12 +209,18 @@ void spine_render(Renderer *renderer, spSkeleton* skeleton) {
     );
 }
 
+int dragging = 0;
+
+float scale = 1.0f;
+double lastMouseX = 0;
+double lastMouseY = 0;
+int currentAnimation = 0;
+
 int create_window(GLFWwindow* window, Renderer* renderer ,char* spine_name, char* animation) {
     glGenVertexArrays(1, &renderer->vao);
     glGenBuffers(1, &renderer->vbo);
     glGenBuffers(1, &renderer->ebo);
     renderer->shader = create_shader_program();
-    SpineObject spine = load_spine(spine_name, animation);
     glBindVertexArray(renderer->vao);
     glBindBuffer(GL_ARRAY_BUFFER, renderer->vbo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer->ebo);
@@ -222,10 +233,37 @@ int create_window(GLFWwindow* window, Renderer* renderer ,char* spine_name, char
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA,
                 GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(renderer->shader);
+    glUniform2f(
+        glGetUniformLocation(renderer->shader, "screenSize"),
+        2000.0,
+        1500.0
+    );
+    float lastTime = glfwGetTime(), now, delta;
     while (!glfwWindowShouldClose(window)) {
-        glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+        glClearColor(0, 0, 0, 0);
         glClear(GL_COLOR_BUFFER_BIT);
-        update_animation(&spine);
+        now = glfwGetTime();
+        delta = now - lastTime;
+        lastTime = now;
+        if (dragging) {
+            double mouseX;
+            double mouseY;
+            glfwGetCursorPos(
+                window,
+                &mouseX,
+                &mouseY
+            );
+            double dx = mouseX - lastMouseX;
+            double dy = mouseY - lastMouseY;
+            spine.skeleton->x += dx;
+            spine.skeleton->y -= dy;
+            lastMouseX = mouseX;
+            lastMouseY = mouseY;
+        }
+        spine.skeleton->scaleX = scale;
+        spine.skeleton->scaleY = scale;
+        update_animation(delta);
         spine_render(renderer, spine.skeleton);
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -234,17 +272,124 @@ int create_window(GLFWwindow* window, Renderer* renderer ,char* spine_name, char
     return 0;
 }
 
-int main() {
+void scroll_callback(
+    GLFWwindow* window,
+    double xoffset,
+    double yoffset
+) {
+    scale += yoffset * 0.1f;
+    if (scale < 0.1f)
+        scale = 0.1f;
+}
+
+void mouse_button_callback(
+    GLFWwindow* window,
+    int button,
+    int action,
+    int mods
+) {
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        if (action == GLFW_PRESS) {
+            dragging = 1;
+            glfwGetCursorPos(
+                window,
+                &lastMouseX,
+                &lastMouseY
+            );
+        }
+        else if (action == GLFW_RELEASE) {
+            dragging = 0;
+        }
+    }
+}
+
+void key_callback(
+    GLFWwindow* window,
+    int key,
+    int scancode,
+    int action,
+    int mods
+) {
+    if (action != GLFW_PRESS)
+        return;
+    if (key == GLFW_KEY_RIGHT) {
+        currentAnimation++;
+        if (currentAnimation >= animationCount)
+            currentAnimation = 0;
+        spAnimationState_setAnimationByName(
+                spine.state,
+                1,
+                animations[
+                    currentAnimation
+                ],
+                1
+        );
+    }
+    if (key == GLFW_KEY_LEFT) {
+        currentAnimation--;
+        if (currentAnimation < 0)
+            currentAnimation =
+                animationCount - 1;
+        spAnimationState_setAnimationByName(
+                        spine.state,
+                        1,
+                        animations[
+                            currentAnimation
+                        ],
+                        1
+                );
+    }
+    printf("%s\n", animations[
+                currentAnimation
+            ]);
+}
+
+int main(int argc, char *argv[]) {
     GLFWwindow* window;
     Renderer renderer;
+    char* character = argv[1], *animation = argv[2];
+
     if (!glfwInit()) return 1;
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE,
+                    GLFW_OPENGL_CORE_PROFILE);
+
+    glfwWindowHint(
+         GLFW_TRANSPARENT_FRAMEBUFFER,
+         GLFW_TRUE
+     );
     window = glfwCreateWindow(2000, 1500, "Spine", NULL, NULL);
     glfwMakeContextCurrent(window);
+    glfwSetMouseButtonCallback(
+        window,
+        mouse_button_callback
+    );
+    glfwSetScrollCallback(
+        window,
+        scroll_callback
+    );
+    glfwSetKeyCallback(
+        window,
+        key_callback
+    );
     // VERY IMPORTANT
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         printf("Failed to initialize GLAD\n");
         return 1;
     }
-    create_window(window, &renderer, "airi", "02");
+    load_spine(character);
+    spAnimationState_setAnimationByName(
+        spine.state,
+        1,
+        animations[
+            currentAnimation
+        ],
+        1
+    );
+    printf("%s\n", animations[
+                currentAnimation
+            ]);
+    create_window(window, &renderer, character, animation);
     return 0;
 }

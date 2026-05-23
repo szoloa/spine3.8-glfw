@@ -7,11 +7,12 @@ layout(location = 2) in vec4 aColor;
 out vec2 vUV;
 out vec4 vColor;
 
-void main() {
-    float x = aPos.x / 2000.0;
-    float y = aPos.y / 1500.0;
+uniform vec2 screenSize;
 
-    gl_Position = vec4(x, y, -1.0, 1.0);
+void main() {
+    vec2 pos = aPos / screenSize;
+
+    gl_Position = vec4(pos, 0.0, 1.0);
 
     vUV = aUV;
     vColor = aColor;
