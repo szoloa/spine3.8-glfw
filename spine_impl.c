@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include <spine/Atlas.h>
@@ -22,7 +21,6 @@ char* _spUtil_readFile(const char* path, int* length) {
     rewind(file);
 
     char* data = (char*)malloc(size);
-
     fread(data, 1, size, file);
     fclose(file);
 
@@ -39,17 +37,13 @@ void _spAtlasPage_createTexture(spAtlasPage* self, const char* path) {
 
     unsigned char* pixels =
         stbi_load(path, &width, &height, &channels, 4);
-
     if (!pixels) {
         printf("Failed to load image: %s\n", path);
         return;
     }
-
     GLuint tex;
     glGenTextures(1, &tex);
-
     glBindTexture(GL_TEXTURE_2D, tex);
-
     glTexImage2D(
         GL_TEXTURE_2D,
         0,
@@ -61,7 +55,6 @@ void _spAtlasPage_createTexture(spAtlasPage* self, const char* path) {
         GL_UNSIGNED_BYTE,
         pixels
     );
-
     printf("Loading texture: %s\n", path);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
